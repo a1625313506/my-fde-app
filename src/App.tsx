@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 function App() {
+  const [isLoading,setIsLoading]=useState(false)
   const [inputText, setInputText] = useState("")
   const [messages, setMessages] = useState([
     { id: 1, role: "ai", content: "你好！我是你的 AI 助手，今天想学点什么？" }
@@ -17,7 +18,7 @@ function App() {
     // 3. 暂存当前输入，并清空输入框
     const currentInput = inputText;
     setInputText("");
-
+    setIsLoading(true);
     // 4. 发起真实的网络请求给 Python 后端
     try {
       const response = await fetch("http://127.0.0.1:8000/chat", {
@@ -48,6 +49,8 @@ function App() {
         content: "网络请求失败，请检查 Python 后端是否启动！" 
       };
       setMessages((prev) => [...prev, errorMsg]);
+    }finally {
+      setIsLoading(false);
     }
   }
 
@@ -80,7 +83,15 @@ function App() {
               </div>
             </div>
           )
-        })}
+        })}{
+          isLoading &&(
+            <div className="flex justify-start">
+              <div className="bg-white p-3 rounded-lg shadow-sm text-gray-500 animate-pulse">
+              AI正在思考。。。
+              </div>
+            </div>
+          )
+        }
       </main>
 
       {/* 底部输入区 */}
@@ -94,9 +105,10 @@ function App() {
         />
         <button 
           onClick={handleSend} 
-          className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+          disabled={isLoading}
+          className={`text-white px-6 py-2 rounded-lg ${isLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'}`}
         >
-          发送
+          {isLoading ? '发送中' : '发送'}
         </button>
       </footer>
     </div>

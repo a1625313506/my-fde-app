@@ -23,24 +23,58 @@ function App() {
     try {
       const response = await fetch("http://127.0.0.1:8000/chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: currentInput })
       });
 
-      // 解析后端返回的 JSON 数据
-      const data = await response.json();
+      // 检查网络请求是否成功
+      if (!response.ok) throw new Error("网络请求失败");
 
-      // 5. 把后端的回复上屏
-      const newAiMsg = { 
-        id: Date.now() + 1, 
-        role: "ai", 
-        content: data.reply 
-      };
-      setMessages((prev) => [...prev, newAiMsg]);
+      // 🌟 1. 先占个位！在屏幕上放一个空的 AI 气泡
+      const aiMsgId = Date.now() + 1;
+      setMessages((prev) => [...prev, { id: aiMsgId, role: "ai", content: "" }]);
 
+      // 🌟 2. 获取读取器，准备接水管
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let aiContent = ""; // 用来拼接收到的字
+
+      if (reader) {
+        while (true) {
+          // 读取一块数据（水滴）
+          const { done, value } = await reader.read();
+          if (done) break; // 读完了就退出循环
+
+          // 解码这块数据
+          const chunk = decoder.decode(value, { stream: true });
+          
+          // 解析大模型的 SSE 格式（这里比较绕，是大模型固定的返回格式）
+          const lines = chunk.split("\n");
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const dataStr = line.replace("data: ", "");
+              if (dataStr === "[DONE]") continue;
+              
+              try {
+                const parsed = JSON.parse(dataStr);
+                const textChunk = parsed.choices[0]?.delta?.content || "";
+                aiContent += textChunk; // 把新吐出来的字拼接到一起
+
+                // 🌟 3. 实时更新那个占位的气泡（只更新刚加进去的那一条）
+                setMessages((prev) => 
+                  prev.map((msg) => 
+                    msg.id === aiMsgId ? { ...msg, content: aiContent } : msg
+                  )
+                );
+              } catch (e) {
+                // 忽略解析错误（有时候数据包会被截断，下一包会补上）
+              }
+            }
+          }
+        }
+      }
     } catch (error) {
+      // ... 你的 catch 和 finally 代码保持不变 ... catch (error) {
       // 如果后端没开，或者网络报错，咱们就弹昨天写的那个黄色警告气泡！
       console.error("请求失败:", error);
       const errorMsg = { 

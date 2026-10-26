@@ -1,75 +1,20 @@
-# React + TypeScript + Vite
+# 🤖 My AI Assistant (Frontend)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+一个基于 React + Tailwind CSS 开发的现代化 AI 聊天助手前端。支持流式打字机效果与丝滑的用户交互体验。
 
-Currently, two official plugins are available:
+## 🚀 技术栈
+- **框架**: React 18 + TypeScript + Vite
+- **样式**: Tailwind CSS
+- **通信**: Fetch API + ReadableStream (SSE 流式解析)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## ✨ 核心功能
+- **打字机效果**：实时解析并渲染大模型流式数据，体验对标 ChatGPT。
+- **乐观更新**：消息发送即时上屏，无需等待网络。
+- **状态管理**：Loading 动画、防连点禁用、多角色气泡样式区分。
 
-## React Compiler
+## 📦 本地运行
+1. `npm install`
+2. `npm run dev`
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
-```
-
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
-```
+> 注意：请确保后端服务已在 `localhost:8000` 启动。
+> 后端仓库：[点击访问](https://github.com/a1625313506/my-fde-backend)

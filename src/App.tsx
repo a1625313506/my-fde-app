@@ -20,12 +20,13 @@ function App() {
     const currentInput = inputText;
     setInputText("");
     setIsLoading(true);
+    const updatedMessages = [...messages, newUserMsg];
     // 4. 发起真实的网络请求给 Python 后端
     try {
       const response = await fetch("http://127.0.0.1:8000/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: currentInput })
+        body: JSON.stringify({ messages: updatedMessages })
       });
 
       // 检查网络请求是否成功

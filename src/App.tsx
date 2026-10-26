@@ -1,5 +1,6 @@
 import { useState } from 'react'
-
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 function App() {
   const [isLoading,setIsLoading]=useState(false)
   const [inputText, setInputText] = useState("")
@@ -112,9 +113,38 @@ function App() {
 
           return (
             <div key={msg.id} className={`flex ${align}`}>
-              <div className={`p-3 rounded-lg shadow-sm max-w-md ${bubbleColor}`}>
-                {msg.content}
-              </div>
+              <div className={`p-3 rounded-lg shadow-sm max-w-md ${bubbleColor} overflow-hidden`}>
+  {msg.role === 'ai' ? (
+    // AI 的消息，用 Markdown 渲染
+    <ReactMarkdown 
+      remarkPlugins={[remarkGfm]}
+      components={{
+        // 自定义代码块的样式
+        code({node, inline, className, children, ...props}: any) {
+          const match = /language-(\w+)/.exec(className || '')
+          return !inline ? (
+            // 如果是代码块（多行），用黑色背景
+            <pre className="bg-gray-800 text-green-400 p-3 rounded-md overflow-x-auto text-sm my-2">
+              <code className={className} {...props}>
+                {children}
+              </code>
+            </pre>
+          ) : (
+            // 如果是单行代码（用反引号包裹的），用灰色背景
+            <code className="bg-gray-200 text-red-500 px-1 py-0.5 rounded text-sm" {...props}>
+              {children}
+            </code>
+          )
+        }
+      }}
+    >
+      {msg.content}
+    </ReactMarkdown>
+  ) : (
+    // 用户和警告的消息，按纯文本输出（防止用户瞎敲代码格式把页面弄乱）
+    msg.content
+  )}
+</div>
             </div>
           )
         })}{

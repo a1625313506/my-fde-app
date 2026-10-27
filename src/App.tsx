@@ -1,8 +1,26 @@
-import { useState } from 'react'
+import { useState,useEffect } from 'react'
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 function App() {
   const [isLoading,setIsLoading]=useState(false)
+  // 🌟 页面刚加载时，去拉取历史记录
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const res = await fetch("http://127.0.0.1:8000/history");
+        const data = await res.json();
+        
+        // 如果数据库里有记录，就覆盖掉默认的初始欢迎语
+        if (data.history && data.history.length > 0) {
+          setMessages(data.history);
+        }
+      } catch (error) {
+        console.error("拉取历史记录失败", error);
+      }
+    };
+    
+    fetchHistory();
+  }, []); // 🌟 注意这里的中括号，表示只在页面挂载时执行一次
   const [inputText, setInputText] = useState("")
   const [messages, setMessages] = useState([
     { id: 1, role: "ai", content: "你好！我是你的 AI 助手，今天想学点什么？" }

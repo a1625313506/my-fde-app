@@ -1,199 +1,208 @@
-import { useState,useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+
 function App() {
-  const [isLoading,setIsLoading]=useState(false)
-  // 🌟 页面刚加载时，去拉取历史记录
+  const [inputText, setInputText] = useState("")
+  const [messages, setMessages] = useState<{id: number, role: string, content: string}[]>([])
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const [conversationId, setConversationId] = useState<number | null>(null);
+  const [historyList, setHistoryList] = useState<number[]>([]); 
+
+  // 1. 页面初始化，只执行一次：建一个新房间
   useEffect(() => {
-    const fetchHistory = async () => {
+    const init = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/history");
+        const res = await fetch("http://127.0.0.1:8000/conversation/new", { method: "POST" });
         const data = await res.json();
-        
-        // 如果数据库里有记录，就覆盖掉默认的初始欢迎语
-        if (data.history && data.history.length > 0) {
-          setMessages(data.history);
-        }
+        setConversationId(data.conversation_id);
+        setHistoryList([data.conversation_id]);
       } catch (error) {
-        console.error("拉取历史记录失败", error);
+        console.error("初始化失败", error);
       }
     };
+    init();
+  }, []);
+
+  // 2. 监听会话ID变化，拉取对应房间的历史记录
+  useEffect(() => {
+    if (!conversationId) return;
     
+    const fetchHistory = async () => {
+      try {
+        const res = await fetch(`http://127.0.0.1:8000/history/${conversationId}`);
+        const data = await res.json();
+        
+        if (data.history && data.history.length > 0) {
+          setMessages(data.history);
+        } else {
+          setMessages([{ id: Date.now(), role: "ai", content: "你好！这是一个新会话，今天想聊点什么？" }]);
+        }
+      } catch (error) {
+        console.error("拉取历史失败", error);
+      }
+    };
     fetchHistory();
-  }, []); // 🌟 注意这里的中括号，表示只在页面挂载时执行一次
-  const [inputText, setInputText] = useState("")
-  const [messages, setMessages] = useState([
-    { id: 1, role: "ai", content: "你好！我是你的 AI 助手，今天想学点什么？" }
-  ])
+  }, [conversationId]); 
 
+  // 3. 左侧边栏点击“新建对话”的函数
+  const handleNewChat = async () => {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/conversation/new", { method: "POST" });
+      const data = await res.json();
+      setHistoryList(prev => [data.conversation_id, ...prev]);
+      setConversationId(data.conversation_id);
+    } catch (error) {
+      console.error("新建房间失败", error);
+    }
+  }// 4. 发送消息
   const handleSend = async () => {
-    // 1. 判空
-    if (inputText.trim() === "") return;
+    if (inputText.trim() === "" || isLoading || !conversationId) return;
 
-    // 2. 先把用户的消息上屏
     const newUserMsg = { id: Date.now(), role: "user", content: inputText };
     setMessages((prev) => [...prev, newUserMsg]);
     
-    // 3. 暂存当前输入，并清空输入框
     const currentInput = inputText;
     setInputText("");
     setIsLoading(true);
+    
     const updatedMessages = [...messages, newUserMsg];
-    // 4. 发起真实的网络请求给 Python 后端
+
     try {
       const response = await fetch("http://127.0.0.1:8000/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: updatedMessages })
+        body: JSON.stringify({ messages: updatedMessages, conversation_id: conversationId })
       });
 
-      // 检查网络请求是否成功
       if (!response.ok) throw new Error("网络请求失败");
 
-      // 🌟 1. 先占个位！在屏幕上放一个空的 AI 气泡
       const aiMsgId = Date.now() + 1;
       setMessages((prev) => [...prev, { id: aiMsgId, role: "ai", content: "" }]);
 
-      // 🌟 2. 获取读取器，准备接水管
       const reader = response.body?.getReader();
       const decoder = new TextDecoder("utf-8");
-      let aiContent = ""; // 用来拼接收到的字
+      let aiContent = ""; 
 
       if (reader) {
         while (true) {
-          // 读取一块数据（水滴）
           const { done, value } = await reader.read();
-          if (done) break; // 读完了就退出循环
-
-          // 解码这块数据
-          const chunk = decoder.decode(value, { stream: true });
+          if (done) break;
           
-          // 解析大模型的 SSE 格式（这里比较绕，是大模型固定的返回格式）
+          const chunk = decoder.decode(value, { stream: true });
           const lines = chunk.split("\n");
           for (const line of lines) {
             if (line.startsWith("data: ")) {
-              const dataStr = line.replace("data: ", "");
-              if (dataStr === "[DONE]") continue;
-              
+              const dataStr = line.replace("data: ", "").trim();
+              if (dataStr === "[DONE]" || !dataStr) continue;
               try {
                 const parsed = JSON.parse(dataStr);
                 const textChunk = parsed.choices[0]?.delta?.content || "";
-                aiContent += textChunk; // 把新吐出来的字拼接到一起
-
-                // 🌟 3. 实时更新那个占位的气泡（只更新刚加进去的那一条）
-                setMessages((prev) => 
-                  prev.map((msg) => 
-                    msg.id === aiMsgId ? { ...msg, content: aiContent } : msg
-                  )
-                );
-              } catch (e) {
-                // 忽略解析错误（有时候数据包会被截断，下一包会补上）
-              }
+                if (textChunk) {
+                  aiContent += textChunk; 
+                  setMessages((prev) => 
+                    prev.map((msg) => 
+                      msg.id === aiMsgId ? { ...msg, content: aiContent } : msg
+                    )
+                  );
+                }
+              } catch (e) {}
             }
           }
         }
       }
     } catch (error) {
-      // ... 你的 catch 和 finally 代码保持不变 ... catch (error) {
-      // 如果后端没开，或者网络报错，咱们就弹昨天写的那个黄色警告气泡！
-      console.error("请求失败:", error);
-      const errorMsg = { 
-        id: Date.now() + 2, 
-        role: "warn", 
-        content: "网络请求失败，请检查 Python 后端是否启动！" 
-      };
+      const errorMsg = { id: Date.now() + 2, role: "warn", content: "网络请求失败！" };
       setMessages((prev) => [...prev, errorMsg]);
-    }finally {
-      setIsLoading(false);
+    } finally {
+      setIsLoading(false); 
     }
   }
-
   return (
-    <div className="h-screen bg-gray-100 flex flex-col">
-      {/* 顶部导航 */}
-      <header className="bg-white p-4 shadow-sm text-center font-bold text-xl text-gray-700">
-        🤖 My AI Assistant
-      </header>
-
-      {/* 聊天区域 */}
-      <main className="flex-1 p-4 overflow-y-auto flex flex-col gap-4">
-        {messages.map((msg) => {
-          // 用 if-else 处理我们自定义的三种样式
-          let align = "justify-start";
-          let bubbleColor = "bg-white text-gray-800";
-
-          if (msg.role === "user") {
-            align = "justify-end";
-            bubbleColor = "bg-blue-500 text-white";
-          } else if (msg.role === "warn") {
-            align = "justify-center"; // 警告居中
-            bubbleColor = "bg-yellow-500 text-white"; // 警告用黄色
-          }
-
-          return (
-            <div key={msg.id} className={`flex ${align}`}>
-              <div className={`p-3 rounded-lg shadow-sm max-w-md ${bubbleColor} overflow-hidden`}>
-  {msg.role === 'ai' ? (
-    // AI 的消息，用 Markdown 渲染
-    <ReactMarkdown 
-      remarkPlugins={[remarkGfm]}
-      components={{
-        // 自定义代码块的样式
-        code({node, inline, className, children, ...props}: any) {
-          const match = /language-(\w+)/.exec(className || '')
-          return !inline ? (
-            // 如果是代码块（多行），用黑色背景
-            <pre className="bg-gray-800 text-green-400 p-3 rounded-md overflow-x-auto text-sm my-2">
-              <code className={className} {...props}>
-                {children}
-              </code>
-            </pre>
-          ) : (
-            // 如果是单行代码（用反引号包裹的），用灰色背景
-            <code className="bg-gray-200 text-red-500 px-1 py-0.5 rounded text-sm" {...props}>
-              {children}
-            </code>
-          )
-        }
-      }}
-    >
-      {msg.content}
-    </ReactMarkdown>
-  ) : (
-    // 用户和警告的消息，按纯文本输出（防止用户瞎敲代码格式把页面弄乱）
-    msg.content
-  )}
-</div>
+    <div className="h-screen bg-gray-100 flex">
+      {/* 左侧边栏 */}
+      <div className="w-64 bg-gray-900 text-white flex flex-col">
+        <div className="p-4">
+          <button 
+            onClick={handleNewChat}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-bold transition-colors"
+          >
+            + 新建对话
+          </button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto px-2">
+          {historyList.map((id) => (
+            <div 
+              key={id}
+              onClick={() => setConversationId(id)}
+              className={`p-3 mb-2 rounded-lg cursor-pointer text-sm truncate transition-colors ${
+                conversationId === id ? "bg-gray-700" : "hover:bg-gray-800"
+              }`}
+            >
+              💬 会话 # {id}
             </div>
-          )
-        })}{
-          isLoading &&(
-            <div className="flex justify-start">
-              <div className="bg-white p-3 rounded-lg shadow-sm text-gray-500 animate-pulse">
-              AI正在思考。。。
+          ))}
+        </div>
+      </div>
+
+      {/* 右侧主聊天区 */}
+      <div className="flex-1 flex flex-col bg-gray-50">
+        <header className="bg-white p-4 shadow-sm text-center font-bold text-xl text-gray-700">
+          🤖 My AI Assistant {conversationId ? `(当前房间: ${conversationId})` : ''}
+        </header>
+
+        <main className="flex-1 p-4 overflow-y-auto flex flex-col gap-4">
+          {messages.map((msg) => {
+            let align = "justify-start";
+            let bubbleColor = "bg-white text-gray-800";
+            if (msg.role === "user") {
+              align = "justify-end";
+              bubbleColor = "bg-blue-500 text-white";
+            } else if (msg.role === "warn") {
+              align = "justify-center"; 
+              bubbleColor = "bg-yellow-500 text-white"; 
+            }
+            return (
+              <div key={msg.id} className={`flex ${align}`}>
+                <div className={`p-3 rounded-lg shadow-sm max-w-md ${bubbleColor} overflow-hidden`}>
+                  {msg.role === 'ai' ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                  ) : (
+                    msg.content
+                  )}
+                </div>
               </div>
+            )
+          })}
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="bg-white p-3 rounded-lg shadow-sm text-gray-500 animate-pulse">AI 正在思考中... 💭</div>
             </div>
-          )
-        }
-      </main>
+          )}
+        </main>
 
-      {/* 底部输入区 */}
-      <footer className="bg-white p-4 flex gap-2">
-        <input 
-          type="text" 
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          placeholder="输入你的问题..." 
-          className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <button 
-          onClick={handleSend} 
-          disabled={isLoading}
-          className={`text-white px-6 py-2 rounded-lg ${isLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'}`}
-        >
-          {isLoading ? '发送中' : '发送'}
-        </button>
-      </footer>
+        <footer className="bg-white p-4 flex gap-2">
+          <input 
+            type="text" 
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            placeholder="输入你的问题..." 
+            className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button 
+            onClick={handleSend} 
+            disabled={isLoading}
+            className={`text-white px-6 py-2 rounded-lg font-medium transition-colors ${
+              isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-600"
+            }`}
+          >
+            {isLoading ? "发送中..." : "发送"}
+          </button>
+        </footer>
+      </div>
     </div>
   )
 }

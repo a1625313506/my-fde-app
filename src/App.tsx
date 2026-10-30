@@ -14,7 +14,7 @@ function App() {
   useEffect(() => {
     const init = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/conversation/new", { method: "POST" });
+        const res = await fetch("/api/conversation/new", { method: "POST" });
         const data = await res.json();
         setConversationId(data.conversation_id);
         setHistoryList([data.conversation_id]);
@@ -31,7 +31,7 @@ function App() {
     
     const fetchHistory = async () => {
       try {
-        const res = await fetch(`http://127.0.0.1:8000/history/${conversationId}`);
+        const res = await fetch(`/api/history/${conversationId}`);
         const data = await res.json();
         
         if (data.history && data.history.length > 0) {
@@ -49,7 +49,7 @@ function App() {
   // 3. 左侧边栏点击“新建对话”的函数
   const handleNewChat = async () => {
     try {
-      const res = await fetch("http://127.0.0.1:8000/conversation/new", { method: "POST" });
+      const res = await fetch("/api/conversation/new", { method: "POST" });
       const data = await res.json();
       setHistoryList(prev => [data.conversation_id, ...prev]);
       setConversationId(data.conversation_id);
@@ -63,14 +63,14 @@ function App() {
     const newUserMsg = { id: Date.now(), role: "user", content: inputText };
     setMessages((prev) => [...prev, newUserMsg]);
     
-    const currentInput = inputText;
+  
     setInputText("");
     setIsLoading(true);
     
     const updatedMessages = [...messages, newUserMsg];
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/chat", {
+      const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: updatedMessages, conversation_id: conversationId })

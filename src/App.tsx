@@ -9,7 +9,7 @@ function App() {
   
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [historyList, setHistoryList] = useState<number[]>([]); 
-
+  const [isUploading, setIsUploading]=useState(false);
   // 1. 页面初始化，只执行一次：建一个新房间
   useEffect(() => {
     const init = async () => {
@@ -57,6 +57,36 @@ function App() {
       console.error("新建房间失败", error);
     }
   }// 4. 发送消息
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  setIsUploading(true);
+  // 准备一个“文件快递盒”
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const response = await fetch("/api/upload_pdf", {
+      method: "POST",
+      // ⚠️ 注意：千万不要自己加 'Content-Type': 'multipart/form-data'
+      // 浏览器会自动加上并带上一个 boundary 边界标识
+      body: formData, 
+    });
+    
+    if (!response.ok) throw new Error("上传失败");
+    
+    const data = await response.json();
+    alert(`上传成功！共切分为 ${data.chunks_count} 个知识块！`);
+  } catch (error) {
+    console.error(error);
+    alert("上传失败，请检查后端终端！");
+  } finally {
+    setIsUploading(false);
+    // 清空 input，允许重复上传同一个文件
+    e.target.value = "";
+  }
+}
   const handleSend = async () => {
     if (inputText.trim() === "" || isLoading || !conversationId) return;
 
@@ -131,7 +161,20 @@ function App() {
             + 新建对话
           </button>
         </div>
-        
+        {/* 🌟 上传知识库按钮 */}
+<div className="px-4 pb-4 border-b border-gray-700">
+  <label className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold transition-colors cursor-pointer flex items-center justify-center gap-2">
+    <span>{isUploading ? "解析中..." : "📁 上传知识库"}</span>
+    {/* 隐藏的原生文件输入框，通过 label 点击触发 */}
+    <input 
+      type="file" 
+      accept=".pdf" 
+      className="hidden" 
+      onChange={handleFileUpload} 
+      disabled={isUploading}
+    />
+  </label>
+</div>
         <div className="flex-1 overflow-y-auto px-2">
           {historyList.map((id) => (
             <div 
@@ -168,10 +211,31 @@ function App() {
               <div key={msg.id} className={`flex ${align}`}>
                 <div className={`p-3 rounded-lg shadow-sm max-w-md ${bubbleColor} overflow-hidden`}>
                   {msg.role === 'ai' ? (
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
-                  ) : (
-                    msg.content
-                  )}
+  <ReactMarkdown 
+    remarkPlugins={[remarkGfm]}
+    components={{
+      code(props: any) {
+        const {children, className, node, ...rest} = props
+        const match = /language-(\w+)/.exec(className || '')
+        return !match ? (
+          <code {...rest} className={className}>
+            {children}
+          </code>
+        ) : (
+          <pre className="bg-gray-800 text-green-400 p-3 rounded-md overflow-x-auto text-sm my-2">
+            <code {...rest} className={className}>
+              {children}
+            </code>
+          </pre>
+        )
+      }
+    }}
+  >
+    {msg.content}
+  </ReactMarkdown>
+) : (
+  msg.content
+)}
                 </div>
               </div>
             )

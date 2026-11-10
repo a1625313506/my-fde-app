@@ -170,9 +170,22 @@ function App() {
           }
         }
       }
-    } catch (error) {
-      const errorMsg = { id: Date.now() + 2, role: "warn", content: "网络请求失败！" };
-      setMessages((prev) => [...prev, errorMsg]);
+    } catch (error: any) {
+      // 🌟 核心：判断是不是用户主动点击了“停止生成”
+      if (error.name === 'AbortError') {
+        console.log("用户主动停止了生成，忽略此报错");
+        // 可选优化：在已经生成的气泡后面加个【已停止】
+        setMessages((prev) => 
+          prev.map((msg) => 
+            msg.role === 'ai' && msg.content ? { ...msg, content: msg.content + " [已停止]" } : msg
+          )
+        );
+      } else {
+        // 如果不是主动停止的，才显示真实的网络报错
+        console.error("真实请求失败:", error);
+        const errorMsg = { id: Date.now() + 2, role: "warn", content: "网络请求失败！" };
+        setMessages((prev) => [...prev, errorMsg]);
+      }
     } finally {
       setIsLoading(false); 
     }
@@ -206,21 +219,21 @@ function App() {
         <div className="flex-1 overflow-y-auto px-2">
           {historyList.map((id) => (
             <div 
-                key={id}
-                onClick={() => setConversationId(id)}
-                className={`group flex justify-between items-center p-3 mb-2 rounded-lg cursor-pointer text-sm truncate transition-colors ${
-                  conversationId === id ? "bg-gray-700" : "hover:bg-gray-800"
-                }`}
+              key={id}
+              onClick={() => setConversationId(id)}
+              className={`group flex justify-between items-center p-3 mb-2 rounded-lg cursor-pointer text-sm truncate transition-colors ${
+                conversationId === id ? "bg-gray-700" : "hover:bg-gray-800"
+              }`}
+            >
+              <span>💬 会话 # {id}</span>
+              {/* 🌟 默认隐藏，鼠标悬停时显示垃圾桶 */}
+              <button 
+                onClick={(e) => handleDeleteChat(e, id)}
+                className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
               >
-                <span>💬 会话 # {id}</span>
-                {/* 🌟 默认隐藏，鼠标悬停时显示垃圾桶 */}
-                <button 
-                  onClick={(e) => handleDeleteChat(e, id)}
-                  className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
-                >
-                  🗑️
-                </button>
-              </div>
+                🗑️
+              </button>
+            </div>
           ))}
         </div>
       </div>

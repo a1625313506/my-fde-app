@@ -10,6 +10,7 @@ function App() {
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [historyList, setHistoryList] = useState<number[]>([]); 
   const [isUploading, setIsUploading]=useState(false);
+  const [abortController,setAbortController]=useState<AbortController|null>(null);
   // 1. 页面初始化，只执行一次：建一个新房间
   useEffect(() => {
     const init = async () => {
@@ -87,6 +88,30 @@ function App() {
     e.target.value = "";
   }
 }
+  const handleStop=()=>{
+    if(abortController){
+      abortController.abort();
+      setIsLoading(false);
+    }
+  }
+  const handleDeleteChat = async (e: React.MouseEvent, id: number) => {
+  e.stopPropagation(); // 🌟 核心：阻止事件冒泡，防止点删除时触发了切换会话
+  if (!window.confirm("确定要删除这个会话吗？")) return;
+
+  try {
+    await fetch(`/api/conversation/${id}`, { method: "DELETE" });
+    // 从列表中剔除
+    setHistoryList(prev => prev.filter(item => item !== id));
+    // 如果删的是当前正在聊的，切到第一个，或者清空
+    if (conversationId === id) {
+      const remaining = historyList.filter(item => item !== id);
+      if (remaining.length > 0) setConversationId(remaining[0]);
+      else handleNewChat(); // 如果全删光了，自动建个新的
+    }
+  } catch (error) {
+    console.error("删除失败", error);
+  }
+}
   const handleSend = async () => {
     if (inputText.trim() === "" || isLoading || !conversationId) return;
 
@@ -100,10 +125,13 @@ function App() {
     const updatedMessages = [...messages, newUserMsg];
 
     try {
+      const controller =new AbortController();
+      setAbortController(controller);
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: updatedMessages, conversation_id: conversationId })
+        body: JSON.stringify({ messages: updatedMessages, conversation_id: conversationId }),
+        signal:controller.signal
       });
 
       if (!response.ok) throw new Error("网络请求失败");
@@ -178,14 +206,21 @@ function App() {
         <div className="flex-1 overflow-y-auto px-2">
           {historyList.map((id) => (
             <div 
-              key={id}
-              onClick={() => setConversationId(id)}
-              className={`p-3 mb-2 rounded-lg cursor-pointer text-sm truncate transition-colors ${
-                conversationId === id ? "bg-gray-700" : "hover:bg-gray-800"
-              }`}
-            >
-              💬 会话 # {id}
-            </div>
+                key={id}
+                onClick={() => setConversationId(id)}
+                className={`group flex justify-between items-center p-3 mb-2 rounded-lg cursor-pointer text-sm truncate transition-colors ${
+                  conversationId === id ? "bg-gray-700" : "hover:bg-gray-800"
+                }`}
+              >
+                <span>💬 会话 # {id}</span>
+                {/* 🌟 默认隐藏，鼠标悬停时显示垃圾桶 */}
+                <button 
+                  onClick={(e) => handleDeleteChat(e, id)}
+                  className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
+                >
+                  🗑️
+                </button>
+              </div>
           ))}
         </div>
       </div>
@@ -257,13 +292,12 @@ function App() {
             className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button 
-            onClick={handleSend} 
-            disabled={isLoading}
+            onClick={isLoading?handleStop:handleSend} 
             className={`text-white px-6 py-2 rounded-lg font-medium transition-colors ${
               isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-600"
             }`}
           >
-            {isLoading ? "发送中..." : "发送"}
+            {isLoading ? "停止生成" : "发送"}
           </button>
         </footer>
       </div>
